@@ -102,7 +102,6 @@
             >
           </li>
           <li class="nav-item">
-          <li class="nav-item">
             <a class="nav-link" href="#" data-section="assessmentHps"
               ><i class="fas fa-calculator me-2"></i>Assessment & HPS</a
             >
@@ -738,87 +737,6 @@
                   <button class="btn btn-primary w-100" onclick="saveWeights()">
                     Save Weights
                   </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Assessment Entry Section -->
-        <div id="assessmentSection" class="section d-none">
-          <h4 class="fw-bold mb-4">Assessment Entry</h4>
-          <div class="row">
-            <div class="col-md-5">
-              <div class="card">
-                <div class="card-header">
-                  <h5 class="mb-0">Add New Assessment</h5>
-                </div>
-                <div class="card-body">
-                  <form id="assessmentForm">
-                    <div class="mb-3">
-                      <label class="form-label">Assessment Type</label>
-                      <select class="form-select" id="assessmentType" required>
-                        <option value="">Select Type</option>
-                        <option value="written">Written Exam</option>
-                        <option value="quiz">Quiz</option>
-                        <option value="pt">Performance Task</option>
-                        <option value="project">Project</option>
-                      </select>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Assessment Title</label>
-                      <input
-                        type="text"
-                        class="form-control"
-                        id="assessmentTitle"
-                        placeholder="e.g., Quiz 1, Midterm Exam, PT 1"
-                        required
-                      />
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Date Taken</label>
-                      <input
-                        type="date"
-                        class="form-control"
-                        id="assessmentDate"
-                        required
-                      />
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Course</label>
-                      <select
-                        class="form-select"
-                        id="assessmentCourse"
-                        required
-                      >
-                        <option value="">Select Course</option>
-                      </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">
-                      Add Assessment
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-7">
-              <div class="card">
-                <div class="card-header">
-                  <h5 class="mb-0">Assessment List</h5>
-                </div>
-                <div class="card-body">
-                  <table class="table table-sm" id="assessmentTable">
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Title</th>
-                        <th>Course</th>
-                        <th>Date</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody></tbody>
-                  </table>
                 </div>
               </div>
             </div>

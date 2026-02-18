@@ -2371,6 +2371,28 @@
         var courseId = parseInt(
           document.getElementById("gradeCourseSelect").value,
         );
+
+        // Check if Assessment & HPS is configured for this course
+        if (courseId) {
+          var hasAssessmentHps = checkAssessmentHpsForCourse(courseId);
+          if (!hasAssessmentHps) {
+            alert(
+              "Assessment & HPS is not configured for this course!\n\nPlease go to 'Assessment & HPS' section and configure the assessments first before entering grades.",
+            );
+            // Clear the table and hide it
+            var table = document.getElementById("gradeEntryTable");
+            var tbody = document.getElementById("gradeEntryTableBody");
+            var noStudents = document.getElementById("noEnrolledStudents");
+            var inputPanel = document.getElementById("gradeInputPanel");
+            table.classList.add("d-none");
+            noStudents.classList.remove("d-none");
+            noStudents.querySelector("p").textContent =
+              "Please configure Assessment & HPS first";
+            inputPanel.classList.add("d-none");
+            return;
+          }
+        }
+
         var examType = document.getElementById("examTypeSelect").value;
 
         var table = document.getElementById("gradeEntryTable");
@@ -4058,7 +4080,9 @@
         }
 
         save();
-        alert("Assessment & HPS saved successfully!");
+        alert(
+          "Assessment & HPS saved successfully!\n\nYou can now go to 'Grade Entry' to enter grades for this course.",
+        );
       }
 
       // Group Management Functions

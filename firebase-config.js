@@ -1,7 +1,7 @@
 // ============================================
 // Student Grade Tracker - Enhanced Dual Storage Sync Manager
 // Works with both Firebase and localStorage seamlessly
-// GitHub Pages compatible with graceful fallback
+// GitHub Pages compatible with localStorage-first approach
 // ============================================
 
 // Firebase SDK (loaded from CDN in HTML)
@@ -14,7 +14,7 @@ const DB_KEY = "academic_grade_system_v1";
 const SYNC_STATUS_KEY = "academic_sync_status";
 const LAST_SYNC_KEY = "academic_last_sync";
 
-// Firebase configuration
+// Firebase configuration (optional)
 const firebaseConfig = {
   apiKey: "AIzaSyC3T9M61Ryll8scTGVWH5QdZKuAguWTzgw",
   authDomain: "studentgradetracker-e04c0.firebaseapp.com",
@@ -25,13 +25,21 @@ const firebaseConfig = {
 };
 
 // ============================================
-// Firebase Initialization with Error Handling
+// Storage Mode Detection
 // ============================================
 
+// Check if we're running on GitHub Pages or any static hosting
+const isGitHubPages = window.location.hostname.includes('github.io') || 
+                      window.location.hostname.includes('github.com');
+
+// Check if Firebase SDK is loaded
+const isFirebaseSDKLoaded = typeof firebase !== 'undefined';
+
+// Try to initialize Firebase (optional - won't break if it fails)
 function initializeFirebase() {
   return new Promise((resolve) => {
-    // Check if Firebase SDK is loaded
-    if (typeof firebase === 'undefined') {
+    // If Firebase SDK not loaded, resolve as unavailable
+    if (!isFirebaseSDKLoaded) {
       console.log("Firebase SDK not loaded - using localStorage only");
       resolve({ available: false, reason: 'sdk_not_loaded' });
       return;
@@ -65,15 +73,18 @@ const SyncManager = {
   lastSyncTime: null,
   storageMode: 'local', // 'local', 'firebase', or 'hybrid'
   
-  // Initialize sync manager
+  // Initialize sync manager - localStorage first, Firebase optional
   async init() {
     // Try to initialize Firebase
     const initResult = await initializeFirebase();
     this.firebaseInitResult = initResult;
     this.firebaseAvailable = initResult.available;
     
-    // Determine storage mode
-    if (this.firebaseAvailable && this.isOnline) {
+    // Determine storage mode - prioritize localStorage
+    // Only use Firebase if explicitly available AND user wants cloud sync
+    const preferCloud = localStorage.getItem('prefer_cloud_sync') === 'true';
+    
+    if (this.firebaseAvailable && this.isOnline && preferCloud) {
       this.storageMode = 'firebase';
     } else {
       this.storageMode = 'local';
@@ -90,8 +101,8 @@ const SyncManager = {
       this.isOnline = true;
       console.log("Connection restored");
       this.updateStorageMode();
-      // Try to sync if Firebase was previously available
-      if (this.firebaseAvailable) {
+      // Try to sync if Firebase was previously available and preferred
+      if (this.firebaseAvailable && localStorage.getItem('prefer_cloud_sync') === 'true') {
         console.log("Syncing with Firebase...");
         this.syncAll();
       }
@@ -114,7 +125,9 @@ const SyncManager = {
   
   // Update storage mode based on connectivity
   updateStorageMode() {
-    if (this.firebaseAvailable && this.isOnline) {
+    const preferCloud = localStorage.getItem('prefer_cloud_sync') === 'true';
+    
+    if (this.firebaseAvailable && this.isOnline && preferCloud) {
       this.storageMode = 'firebase';
     } else {
       this.storageMode = 'local';
@@ -159,17 +172,20 @@ const SyncManager = {
   // Core Data Operations
   // ============================================
   
-  // Load all data (from Firebase first if available, else localStorage)
+  // Load all data - always from localStorage first (most reliable)
   async loadData() {
     let store = this.getLocalData();
     
-    if (this.firebaseAvailable && this.isOnline) {
+    // Optionally try to load from Firebase if cloud sync is enabled
+    const preferCloud = localStorage.getItem('prefer_cloud_sync') === 'true';
+    
+    if (this.firebaseAvailable && this.isOnline && preferCloud) {
       try {
         console.log("Loading data from Firebase...");
         const firebaseData = await this.loadFromFirebase();
         if (firebaseData && Object.keys(firebaseData).length > 0) {
           // Check if Firebase has newer data
-          const localTime = store._lastModified ? new Date(store._lastModified) : new Date(0);
+          const localTime = store && store._lastModified ? new Date(store._lastModified) : new Date(0);
           const firebaseTime = firebaseData._lastModified ? new Date(firebaseData._lastModified) : new Date(0);
           
           if (firebaseTime > localTime) {
@@ -192,16 +208,17 @@ const SyncManager = {
     return this.ensureDefaultStructure(store);
   },
   
-  // Save all data (to both localStorage and Firebase)
+  // Save all data - always to localStorage, optionally to Firebase
   async saveData(store) {
     // Add timestamp for conflict resolution
     store._lastModified = new Date().toISOString();
     
-    // Always save to localStorage
+    // Always save to localStorage (primary storage)
     this.saveLocalData(store);
     
-    // Save to Firebase if available and online
-    if (this.firebaseAvailable && this.isOnline) {
+    // Save to Firebase if available, online, and cloud sync is enabled
+    const preferCloud = localStorage.getItem('prefer_cloud_sync') === 'true';
+    if (this.firebaseAvailable && this.isOnline && preferCloud) {
       try {
         await this.saveToFirebase(store);
         this.lastSyncTime = new Date();
@@ -217,13 +234,14 @@ const SyncManager = {
     store._lastModified = new Date().toISOString();
     this.saveLocalData(store);
     
-    if (this.firebaseAvailable && this.isOnline && !this.syncInProgress) {
+    const preferCloud = localStorage.getItem('prefer_cloud_sync') === 'true';
+    if (this.firebaseAvailable && this.isOnline && preferCloud && !this.syncInProgress) {
       this.syncToFirebaseDebounced(store);
     }
   },
   
   // ============================================
-  // localStorage Operations
+  // localStorage Operations (Primary Storage)
   // ============================================
   
   getLocalData() {
@@ -239,11 +257,19 @@ const SyncManager = {
   },
   
   saveLocalData(store) {
-    localStorage.setItem(DB_KEY, JSON.stringify(store));
+    try {
+      localStorage.setItem(DB_KEY, JSON.stringify(store));
+    } catch (e) {
+      console.error("Error saving to localStorage:", e);
+      // Handle quota exceeded
+      if (e.name === 'QuotaExceededError') {
+        alert("Storage quota exceeded! Please export your data and clear old records.");
+      }
+    }
   },
   
   // ============================================
-  // Firebase Operations
+  // Firebase Operations (Optional Cloud Storage)
   // ============================================
   
   async loadFromFirebase() {
@@ -356,8 +382,9 @@ const SyncManager = {
   // ============================================
   
   async syncAll() {
-    if (!this.isOnline || !this.firebaseAvailable) {
-      console.log("Cannot sync: offline or Firebase unavailable");
+    const preferCloud = localStorage.getItem('prefer_cloud_sync') === 'true';
+    if (!this.isOnline || !this.firebaseAvailable || !preferCloud) {
+      console.log("Cannot sync: offline, Firebase unavailable, or cloud sync disabled");
       return;
     }
     
@@ -440,8 +467,9 @@ const SyncManager = {
           // Save to localStorage
           this.saveLocalData(importedData);
           
-          // If Firebase is available, also sync to Firebase
-          if (this.firebaseAvailable && this.isOnline) {
+          // If Firebase is available and cloud sync enabled, also sync to Firebase
+          const preferCloud = localStorage.getItem('prefer_cloud_sync') === 'true';
+          if (this.firebaseAvailable && this.isOnline && preferCloud) {
             this.saveToFirebase(importedData);
           }
           
@@ -483,6 +511,28 @@ const SyncManager = {
         { min: 0, max: 54, label: "F" },
       ],
       _lastModified: store?._lastModified || new Date().toISOString()
+    };
+  },
+  
+  // ============================================
+  // Utility Functions
+  // ============================================
+  
+  // Clear all data
+  clearAllData() {
+    localStorage.removeItem(DB_KEY);
+    localStorage.removeItem(LAST_SYNC_KEY);
+    console.log("All local data cleared");
+  },
+  
+  // Get storage info
+  getStorageInfo() {
+    const data = localStorage.getItem(DB_KEY);
+    const size = data ? new Blob([data]).size : 0;
+    return {
+      usedBytes: size,
+      usedKB: (size / 1024).toFixed(2),
+      usedMB: (size / (1024 * 1024)).toFixed(2)
     };
   }
 };

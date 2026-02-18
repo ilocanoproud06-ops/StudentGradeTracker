@@ -13,50 +13,16 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK (Optional - for cloud sync) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <!-- Local Storage Sync Manager (works offline) -->
+    <script src="firebase-config.js"></script>
     <script>
-      // Your web app's Firebase configuration
-      const firebaseConfig = {
-        apiKey: "AIzaSyC3T9M61Ryll8scTGVWH5QdZKuAguWTzgw",
-        authDomain: "studentgradetracker-e04c0.firebaseapp.com",
-        projectId: "studentgradetracker-e04c0",
-        storageBucket: "studentgradetracker-e04c0.firebasestorage.app",
-        messagingSenderId: "886408200590",
-        appId: "1:886408200590:web:c9fbdb028e5dcd442c64df",
-      };
-
-      // Initialize Firebase - with error handling for GitHub Pages compatibility
-      let db = null;
-      let auth = null;
-      let firebaseAvailable = false;
-
-      try {
-        if (typeof firebase !== "undefined") {
-          const app = firebase.initializeApp(firebaseConfig);
-          db = firebase.firestore();
-          auth = firebase.auth();
-          firebaseAvailable = true;
-          console.log("Firebase initialized successfully");
-        } else {
-          console.log("Firebase SDK not loaded - using localStorage only");
-        }
-      } catch (error) {
-        console.log("Firebase initialization error:", error.message);
-        console.log("Using localStorage only - app will work offline");
-        firebaseAvailable = false;
-      }
-
-      // Force disable Firebase if it's causing network issues
-      // User can set this to true to re-enable
-      window.FORCE_LOCAL_ONLY = false;
-      if (window.FORCE_LOCAL_ONLY === true) {
-        firebaseAvailable = false;
-        db = null;
-        auth = null;
-      }
+      // Storage mode - default to localStorage for offline use
+      // Set to true only if you want cloud sync with Firebase
+      window.FORCE_LOCAL_ONLY = true; // Always use localStorage first (works offline)
     </script>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap");
@@ -640,7 +606,7 @@
         }
       }
 
-      // Initialize app - load from Firebase first
+      // Initialize app - use SyncManager for offline-first loading
       async function initStudentApp() {
         const loadingIndicator = document.getElementById("loading-indicator");
         const inputField = document.getElementById("student-id-input");
@@ -654,7 +620,10 @@
         if (loginButton) loginButton.style.display = "none";
 
         try {
-          const loaded = await loadFromFirebase();
+          // Use SyncManager - loads from localStorage first (works offline)
+          const storeData = await SyncManager.loadData();
+          store = storeData;
+
           console.log(
             "Student app initialized, students count:",
             store.students.length,
@@ -662,7 +631,6 @@
 
           // Show message if no students found
           if (!store.students || store.students.length === 0) {
-            // Try to show message in the loading indicator
             if (loadingIndicator) {
               loadingIndicator.innerHTML = `
                 <div class="text-warning mb-2">
@@ -682,7 +650,7 @@
               <div class="text-danger mb-2">
                 <i class="fas fa-exclamation-circle fa-2x"></i>
               </div>
-              <p class="text-danger font-bold">Connection Error</p>
+              <p class="text-danger font-bold">Error Loading Data</p>
               <p class="text-slate-500 text-sm">Could not load student data.</p>
               <button class="btn btn-outline-primary btn-sm mt-2" onclick="location.reload()">
                 <i class="fas fa-sync me-1"></i> Try Again
@@ -696,30 +664,36 @@
         if (loadingIndicator) loadingIndicator.style.display = "none";
         if (inputField) inputField.style.display = "block";
         if (loginButton) loginButton.style.display = "block";
+
+        // Update connection status indicator
+        updateConnectionStatus();
       }
 
       // Run initialization
       initStudentApp();
 
-      // Update connection status indicator
+      // Update connection status indicator using SyncManager
       function updateConnectionStatus() {
         const statusEl = document.getElementById("connectionStatus");
         const textEl = document.getElementById("connectionText");
 
         if (!statusEl || !textEl) return;
 
-        if (firebaseAvailable && navigator.onLine) {
+        // Get status from SyncManager
+        const status = SyncManager.getStatus();
+
+        if (status.storageMode === "firebase") {
           statusEl.className = "badge bg-success";
           statusEl.innerHTML =
             '<i class="fas fa-cloud me-1"></i> <span>Cloud Mode</span>';
-        } else if (navigator.onLine) {
-          statusEl.className = "badge bg-info";
-          statusEl.innerHTML =
-            '<i class="fas fa-save me-1"></i> <span>Local Mode</span>';
-        } else {
+        } else if (!status.online) {
           statusEl.className = "badge bg-warning";
           statusEl.innerHTML =
             '<i class="fas fa-wifi me-1"></i> <span>Offline</span>';
+        } else {
+          statusEl.className = "badge bg-info";
+          statusEl.innerHTML =
+            '<i class="fas fa-save me-1"></i> <span>Local Mode</span>';
         }
       }
 

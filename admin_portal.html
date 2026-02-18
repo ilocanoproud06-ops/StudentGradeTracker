@@ -14,47 +14,16 @@
     />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK (Optional - for cloud sync) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <!-- Local Storage Sync Manager (works offline) -->
+    <script src="firebase-config.js"></script>
     <script>
-      // Your web app's Firebase configuration
-      const firebaseConfig = {
-        apiKey: "AIzaSyC3T9M61Ryll8scTGVWH5QdZKuAguWTzgw",
-        authDomain: "studentgradetracker-e04c0.firebaseapp.com",
-        projectId: "studentgradetracker-e04c0",
-        storageBucket: "studentgradetracker-e04c0.firebasestorage.app",
-        messagingSenderId: "886408200590",
-        appId: "1:886408200590:web:c9fbdb028e5dcd442c64df",
-      };
-
-      // Initialize Firebase with error handling
-      let app = null;
-      let db = null;
-      let auth = null;
-
-      try {
-        if (typeof firebase !== "undefined" && firebaseConfig.apiKey) {
-          app = firebase.initializeApp(firebaseConfig);
-          db = firebase.firestore();
-          auth = firebase.auth();
-          console.log("Firebase initialized successfully");
-        } else {
-          console.log("Firebase not available - using localStorage only");
-        }
-      } catch (error) {
-        console.log("Firebase initialization error:", error.message);
-        console.log("Using localStorage only - app will work offline");
-      }
-
-      // Force local-only mode - set to true if Firebase causes network issues
-      window.FORCE_LOCAL_ONLY = false;
-      if (window.FORCE_LOCAL_ONLY === true) {
-        app = null;
-        db = null;
-        auth = null;
-      }
+      // Storage mode - default to localStorage for offline use
+      // Set to true only if you want cloud sync with Firebase
+      window.FORCE_LOCAL_ONLY = true; // Always use localStorage first (works offline)
     </script>
   </head>
   <body>
@@ -1288,34 +1257,39 @@
       });
 
       function initApp() {
-        // Try to load from Firebase first
-        loadFromFirebase().then(function (firebaseLoaded) {
-          if (firebaseLoaded) {
-            console.log("Data loaded from Firebase");
-          } else {
-            console.log("Using localStorage data");
-          }
+        // Use SyncManager for data loading - works offline
+        // SyncManager will use localStorage first, optionally sync with Firebase if enabled
+        SyncManager.loadData()
+          .then(function (storeData) {
+            store = storeData;
+            console.log("Data loaded, students count:", store.students.length);
 
-          // Continue with app initialization after Firebase load attempt
-          renderDashboard();
-          renderCourses();
-          renderStudents();
-          renderEnrollment();
-          renderGradingScale();
+            // Continue with app initialization
+            renderDashboard();
+            renderCourses();
+            renderStudents();
+            renderEnrollment();
+            renderGradingScale();
 
-          // Populate dashboard grade summary
-          populateDashboardGradeFilter();
-          renderDashboardGradeSummary();
+            // Populate dashboard grade summary
+            populateDashboardGradeFilter();
+            renderDashboardGradeSummary();
 
-          // Initialize default HPS values in store if not present
-          if (!store.hps) {
-            store.hps = { quiz: 50, pt: 100, project: 100, exam: 100 };
-          }
-          if (!store.hps.perAssessment) {
-            store.hps.perAssessment = {};
-          }
-          save();
-        });
+            // Initialize default HPS values in store if not present
+            if (!store.hps) {
+              store.hps = { quiz: 50, pt: 100, project: 100, exam: 100 };
+            }
+            if (!store.hps.perAssessment) {
+              store.hps.perAssessment = {};
+            }
+            save();
+          })
+          .catch(function (error) {
+            console.error("Error loading data:", error);
+            // Use default store on error
+            store = SyncManager.ensureDefaultStructure(null);
+            save();
+          });
       }
 
       function showSection(id) {
@@ -4395,14 +4369,13 @@
       }
 
       function save() {
-        localStorage.setItem(DB_KEY, JSON.stringify(store));
-
-        // Use SyncManager if available for better sync handling
+        // Use SyncManager for saving - works offline by default
+        // SyncManager will save to localStorage first, optionally sync to Firebase if enabled
         if (typeof SyncManager !== "undefined") {
           SyncManager.quickSave(store);
         } else {
-          // Fallback to direct Firebase sync
-          saveToFirebase();
+          // Fallback to direct localStorage save
+          localStorage.setItem(DB_KEY, JSON.stringify(store));
         }
       }
 

@@ -1245,24 +1245,34 @@
       });
 
       function initApp() {
-        renderDashboard();
-        renderCourses();
-        renderStudents();
-        renderEnrollment();
-        renderGradingScale();
+        // Try to load from Firebase first
+        loadFromFirebase().then(function (firebaseLoaded) {
+          if (firebaseLoaded) {
+            console.log("Data loaded from Firebase");
+          } else {
+            console.log("Using localStorage data");
+          }
 
-        // Populate dashboard grade summary
-        populateDashboardGradeFilter();
-        renderDashboardGradeSummary();
+          // Continue with app initialization after Firebase load attempt
+          renderDashboard();
+          renderCourses();
+          renderStudents();
+          renderEnrollment();
+          renderGradingScale();
 
-        // Initialize default HPS values in store if not present
-        if (!store.hps) {
-          store.hps = { quiz: 50, pt: 100, project: 100, exam: 100 };
-        }
-        if (!store.hps.perAssessment) {
-          store.hps.perAssessment = {};
-        }
-        save();
+          // Populate dashboard grade summary
+          populateDashboardGradeFilter();
+          renderDashboardGradeSummary();
+
+          // Initialize default HPS values in store if not present
+          if (!store.hps) {
+            store.hps = { quiz: 50, pt: 100, project: 100, exam: 100 };
+          }
+          if (!store.hps.perAssessment) {
+            store.hps.perAssessment = {};
+          }
+          save();
+        });
       }
 
       function showSection(id) {
@@ -4204,6 +4214,189 @@
 
       function save() {
         localStorage.setItem(DB_KEY, JSON.stringify(store));
+        // Sync to Firebase Firestore
+        saveToFirebase();
+      }
+
+      // ============================================
+      // Firebase Firestore Sync Functions
+      // ============================================
+
+      // Save all data to Firebase Firestore
+      async function saveToFirebase() {
+        try {
+          // Save each collection to Firestore
+          await saveCollectionToFirebase("courses", store.courses);
+          await saveCollectionToFirebase("students", store.students);
+          await saveCollectionToFirebase("enrollments", store.enrollments);
+          await saveCollectionToFirebase("assessments", store.assessments);
+          await saveCollectionToFirebase("groups", store.groups);
+
+          // Save grades (object with dynamic keys)
+          await saveGradesToFirebase("grades", store.grades);
+
+          // Save settings (hps, weights, gradingScale)
+          await saveSettingsToFirebase();
+
+          console.log("Data synced to Firebase successfully");
+        } catch (error) {
+          console.error("Error syncing to Firebase:", error);
+        }
+      }
+
+      // Save a collection array to Firestore
+      async function saveCollectionToFirebase(collectionName, data) {
+        try {
+          // Delete all existing documents in the collection
+          const snapshot = await db.collection(collectionName).get();
+          const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
+          await Promise.all(deletePromises);
+
+          // Add all items from the array
+          if (data && data.length > 0) {
+            const addPromises = data.map((item) =>
+              db.collection(collectionName).add(item),
+            );
+            await Promise.all(addPromises);
+          }
+        } catch (error) {
+          console.error(`Error saving ${collectionName} to Firebase:`, error);
+        }
+      }
+
+      // Save grades to Firestore (grades is an object, not array)
+      async function saveGradesToFirebase(collectionName, data) {
+        try {
+          // Delete all existing documents in grades collection
+          const snapshot = await db.collection(collectionName).get();
+          const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
+          await Promise.all(deletePromises);
+
+          // Add each grade entry as a document
+          if (data) {
+            const entries = Object.entries(data);
+            if (entries.length > 0) {
+              const addPromises = entries.map(([key, value]) =>
+                db.collection(collectionName).add({ id: key, ...value }),
+              );
+              await Promise.all(addPromises);
+            }
+          }
+        } catch (error) {
+          console.error(`Error saving ${collectionName} to Firebase:`, error);
+        }
+      }
+
+      // Save settings (hps, weights, gradingScale) to Firestore
+      async function saveSettingsToFirebase() {
+        try {
+          // Save hps
+          if (store.hps) {
+            await db.collection("settings").doc("hps").set(store.hps);
+          }
+
+          // Save weights
+          if (store.weights) {
+            await db.collection("settings").doc("weights").set(store.weights);
+          }
+
+          // Save gradingScale
+          if (store.gradingScale) {
+            await db.collection("settings").doc("gradingScale").set({
+              scale: store.gradingScale,
+            });
+          }
+        } catch (error) {
+          console.error("Error saving settings to Firebase:", error);
+        }
+      }
+
+      // Load all data from Firebase Firestore on startup
+      async function loadFromFirebase() {
+        try {
+          console.log("Loading data from Firebase...");
+
+          // Load collections
+          store.courses = await loadCollectionFromFirebase("courses");
+          store.students = await loadCollectionFromFirebase("students");
+          store.enrollments = await loadCollectionFromFirebase("enrollments");
+          store.assessments = await loadCollectionFromFirebase("assessments");
+          store.groups = await loadCollectionFromFirebase("groups");
+          store.grades = await loadGradesFromFirebase("grades");
+
+          // Load settings
+          const hpsDoc = await db.collection("settings").doc("hps").get();
+          if (hpsDoc.exists) {
+            store.hps = hpsDoc.data();
+          }
+
+          const weightsDoc = await db
+            .collection("settings")
+            .doc("weights")
+            .get();
+          if (weightsDoc.exists) {
+            store.weights = weightsDoc.data();
+          }
+
+          const gradingScaleDoc = await db
+            .collection("settings")
+            .doc("gradingScale")
+            .get();
+          if (gradingScaleDoc.exists) {
+            store.gradingScale = gradingScaleDoc.data().scale || [];
+          }
+
+          // Save to localStorage after loading from Firebase
+          localStorage.setItem(DB_KEY, JSON.stringify(store));
+
+          console.log("Data loaded from Firebase successfully");
+          return true;
+        } catch (error) {
+          console.error("Error loading from Firebase:", error);
+          // Fall back to localStorage on error
+          console.log("Falling back to localStorage...");
+          store = JSON.parse(localStorage.getItem(DB_KEY)) || store;
+          return false;
+        }
+      }
+
+      // Load a collection array from Firestore
+      async function loadCollectionFromFirebase(collectionName) {
+        try {
+          const snapshot = await db.collection(collectionName).get();
+          const data = [];
+          snapshot.forEach((doc) => {
+            data.push(doc.data());
+          });
+          return data;
+        } catch (error) {
+          console.error(
+            `Error loading ${collectionName} from Firebase:`,
+            error,
+          );
+          return [];
+        }
+      }
+
+      // Load grades from Firestore (grades is an object, not array)
+      async function loadGradesFromFirebase(collectionName) {
+        try {
+          const snapshot = await db.collection(collectionName).get();
+          const gradesObj = {};
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            const id = data.id;
+            delete data.id;
+            gradesObj[id] = data;
+          });
+          return gradesObj;
+        } catch (error) {
+          console.error(
+            `Error loading ${collectionName} from Firebase:`,
+            error,
+          );
+          return {};
+        }
       }
 
       // Dashboard Grade Summary Functions

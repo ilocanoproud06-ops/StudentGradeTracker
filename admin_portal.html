@@ -29,10 +29,32 @@
         appId: "1:886408200590:web:c9fbdb028e5dcd442c64df",
       };
 
-      // Initialize Firebase
-      const app = firebase.initializeApp(firebaseConfig);
-      const db = firebase.firestore();
-      const auth = firebase.auth();
+      // Initialize Firebase with error handling
+      let app = null;
+      let db = null;
+      let auth = null;
+
+      try {
+        if (typeof firebase !== "undefined" && firebaseConfig.apiKey) {
+          app = firebase.initializeApp(firebaseConfig);
+          db = firebase.firestore();
+          auth = firebase.auth();
+          console.log("Firebase initialized successfully");
+        } else {
+          console.log("Firebase not available - using localStorage only");
+        }
+      } catch (error) {
+        console.log("Firebase initialization error:", error.message);
+        console.log("Using localStorage only - app will work offline");
+      }
+
+      // Force local-only mode - set to true if Firebase causes network issues
+      window.FORCE_LOCAL_ONLY = false;
+      if (window.FORCE_LOCAL_ONLY === true) {
+        app = null;
+        db = null;
+        auth = null;
+      }
     </script>
   </head>
   <body>
@@ -4332,6 +4354,12 @@
 
       // Save all data to Firebase Firestore
       async function saveToFirebase() {
+        // Check if Firebase is available
+        if (!db || !firebase || typeof firebase.firestore !== "function") {
+          console.log("Firebase not available, skipping sync");
+          return;
+        }
+
         try {
           // Save each collection to Firestore
           await saveCollectionToFirebase("courses", store.courses);
@@ -4354,6 +4382,11 @@
 
       // Save a collection array to Firestore
       async function saveCollectionToFirebase(collectionName, data) {
+        // Check if Firebase is available
+        if (!db || !firebase || typeof firebase.firestore !== "function") {
+          return;
+        }
+
         try {
           // Delete all existing documents in the collection
           const snapshot = await db.collection(collectionName).get();
@@ -4374,6 +4407,11 @@
 
       // Save grades to Firestore (grades is an object, not array)
       async function saveGradesToFirebase(collectionName, data) {
+        // Check if Firebase is available
+        if (!db || !firebase || typeof firebase.firestore !== "function") {
+          return;
+        }
+
         try {
           // Delete all existing documents in grades collection
           const snapshot = await db.collection(collectionName).get();
@@ -4421,6 +4459,13 @@
 
       // Load all data from Firebase Firestore on startup
       async function loadFromFirebase() {
+        // Check if Firebase is available
+        if (!db || !firebase || typeof firebase.firestore !== "function") {
+          console.log("Firebase not available, using localStorage only");
+          store = JSON.parse(localStorage.getItem(DB_KEY)) || store;
+          return false;
+        }
+
         try {
           console.log("Loading data from Firebase...");
 
@@ -4470,6 +4515,11 @@
 
       // Load a collection array from Firestore
       async function loadCollectionFromFirebase(collectionName) {
+        // Check if Firebase is available
+        if (!db || !firebase || typeof firebase.firestore !== "function") {
+          return [];
+        }
+
         try {
           const snapshot = await db.collection(collectionName).get();
           const data = [];
@@ -4488,6 +4538,11 @@
 
       // Load grades from Firestore (grades is an object, not array)
       async function loadGradesFromFirebase(collectionName) {
+        // Check if Firebase is available
+        if (!db || !firebase || typeof firebase.firestore !== "function") {
+          return {};
+        }
+
         try {
           const snapshot = await db.collection(collectionName).get();
           const gradesObj = {};

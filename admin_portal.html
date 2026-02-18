@@ -3749,14 +3749,10 @@
           if (opt.value === "") return; // Skip the placeholder
 
           if (isLabCourse) {
-            // Lab course: Enable PT and Project, keep Written, disable Quizzes
-            if (opt.value === "quiz") {
-              opt.disabled = true;
-            } else {
-              opt.disabled = false;
-            }
+            // Lab course: Enable ALL options (Written, Quiz, PT, Project)
+            opt.disabled = false;
           } else {
-            // Non-lab course: Enable Quizzes and Written, disable PT and Project
+            // Non-lab course: Enable Written and Quizzes, disable PT and Project
             if (opt.value === "pt" || opt.value === "project") {
               opt.disabled = true;
             } else {

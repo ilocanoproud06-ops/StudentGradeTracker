@@ -27,7 +27,7 @@
     </script>
   </head>
   <body>
-    <div class="d-flex" id="mainContent">
+    <div class="d-flex" id="mainContent" style="display: flex !important">
       <div class="bg-dark col-md-2 p-3" style="min-height: 100vh">
         <h5 class="text-white mb-4">
           <i class="fas fa-graduation-cap me-2"></i>AcademicPro
@@ -41,42 +41,66 @@
         </div>
         <ul class="nav flex-column">
           <li class="nav-item">
-            <a class="nav-link active" href="#" data-section="dashboard"
+            <a
+              class="nav-link active"
+              href="javascript:void(0)"
+              onclick="showSection('dashboard')"
               ><i class="fas fa-chart-line me-2"></i>Dashboard</a
             >
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#" data-section="courses"
+            <a
+              class="nav-link"
+              href="javascript:void(0)"
+              onclick="showSection('courses')"
               ><i class="fas fa-book me-2"></i>Courses</a
             >
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#" data-section="students"
+            <a
+              class="nav-link"
+              href="javascript:void(0)"
+              onclick="showSection('students')"
               ><i class="fas fa-users me-2"></i>Students</a
             >
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#" data-section="enrollment"
+            <a
+              class="nav-link"
+              href="javascript:void(0)"
+              onclick="showSection('enrollment')"
               ><i class="fas fa-user-plus me-2"></i>Enrollment</a
             >
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#" data-section="grades"
+            <a
+              class="nav-link"
+              href="javascript:void(0)"
+              onclick="showSection('grades')"
               ><i class="fas fa-clipboard-list me-2"></i>Grade Entry</a
             >
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#" data-section="grading"
+            <a
+              class="nav-link"
+              href="javascript:void(0)"
+              onclick="showSection('grading')"
               ><i class="fas fa-scale-balanced me-2"></i>Grading Scale</a
             >
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#" data-section="assessmentHps"
+            <a
+              class="nav-link"
+              href="javascript:void(0)"
+              onclick="showSection('assessmentHps')"
               ><i class="fas fa-calculator me-2"></i>Assessment & HPS</a
             >
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#" data-section="groups"
+            <a
+              class="nav-link"
+              href="javascript:void(0)"
+              onclick="showSection('groups')"
               ><i class="fas fa-users me-2"></i>Group Management</a
             >
           </li>
@@ -94,6 +118,19 @@
           <p class="text-muted small mb-2">
             <i class="fas fa-database me-1"></i> Data Management
           </p>
+          <!-- Export Status Indicator -->
+          <div id="exportStatusIndicator" class="mb-2">
+            <div data-needs-export class="badge bg-success">
+              <i class="fas fa-check me-1"></i> Up to Date
+            </div>
+          </div>
+          <!-- Export Notification (hidden by default) -->
+          <div
+            id="exportNotification"
+            class="alert alert-success py-1 px-2 mb-2 small d-none"
+          >
+            <i class="fas fa-check-circle me-1"></i> Data saved!
+          </div>
           <button
             class="btn btn-sm btn-outline-light w-100 mb-2"
             onclick="exportData()"
@@ -1233,12 +1270,15 @@
         document.getElementById("mainContent").style.display = "flex";
         initApp();
 
-        document.querySelectorAll(".nav-link").forEach((l) =>
-          l.addEventListener("click", function (e) {
+        // Use event delegation for navigation links (more reliable)
+        document.addEventListener("click", function (e) {
+          // Check if clicked element is a nav-link
+          const navLink = e.target.closest(".nav-link");
+          if (navLink && navLink.dataset.section) {
             e.preventDefault();
-            showSection(this.dataset.section);
-          }),
-        );
+            showSection(navLink.dataset.section);
+          }
+        });
         document
           .getElementById("courseForm")
           .addEventListener("submit", function (e) {
@@ -4382,6 +4422,8 @@
         // SyncManager will save to localStorage first, optionally sync to Firebase if enabled
         if (typeof SyncManager !== "undefined") {
           SyncManager.quickSave(store);
+          // Show notification that data was saved and needs export
+          SyncManager.notifyDataChanged();
         } else {
           // Fallback to direct localStorage save
           localStorage.setItem(DB_KEY, JSON.stringify(store));
@@ -4445,6 +4487,11 @@
 
             // Save to localStorage
             localStorage.setItem(DB_KEY, JSON.stringify(store));
+
+            // Trigger notification that data was changed
+            if (typeof SyncManager !== "undefined") {
+              SyncManager.notifyDataChanged();
+            }
 
             // Refresh the UI
             renderDashboard();

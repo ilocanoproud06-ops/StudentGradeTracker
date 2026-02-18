@@ -7,10 +7,12 @@
 const DB_KEY = "academic_grade_system_v1";
 const SYNC_STATUS_KEY = "academic_sync_status";
 const LAST_SYNC_KEY = "academic_last_sync";
+const SHARED_DATA_NEEDS_EXPORT_KEY = "academic_shared_data_needs_export";
 
 // Default shared data URL - admin can host this file on GitHub Pages
-// For example: https://yourusername.github.io/RepoName/shared-data.json
-const SHARED_DATA_URL = "data.json";
+// For example: https://yourusername.github.io/RepoName/data.json
+// This can be customized per deployment
+let SHARED_DATA_URL = "data.json";
 
 // Check if Firebase SDK is loaded
 const isFirebaseSDKLoaded = typeof firebase !== 'undefined';
@@ -49,6 +51,12 @@ function initializeFirebase() {
   });
 }
 
+// Set custom shared data URL (call this before init if using GitHub Pages)
+function setSharedDataUrl(url) {
+  SHARED_DATA_URL = url;
+  console.log("Shared data URL set to:", SHARED_DATA_URL);
+}
+
 // ============================================
 // Sync Manager with Multiple Storage Options
 // ============================================
@@ -60,6 +68,7 @@ const SyncManager = {
   syncInProgress: false,
   lastSyncTime: null,
   storageMode: 'local',
+  autoExportEnabled: true, // Enable auto-export by default
   
   async init() {
     // Try to initialize Firebase
@@ -131,7 +140,8 @@ const SyncManager = {
       firebase: this.firebaseAvailable,
       storageMode: this.storageMode,
       lastSync: this.lastSyncTime,
-      syncInProgress: this.syncInProgress
+      syncInProgress: this.syncInProgress,
+      sharedDataUrl: SHARED_DATA_URL
     };
   },
   
@@ -139,7 +149,20 @@ const SyncManager = {
   async loadData() {
     let store = this.getLocalData();
     
-    // Priority 1: Try Firebase if available
+    // Priority 1: Try loading from shared data file (GitHub Pages URL)
+    try {
+      const sharedData = await this.loadFromSharedFile(SHARED_DATA_URL);
+      if (sharedData && sharedData.students && sharedData.students.length > 0) {
+        console.log("Loading from shared data file:", SHARED_DATA_URL);
+        store = sharedData;
+        this.saveLocalData(store);
+        return this.ensureDefaultStructure(store);
+      }
+    } catch (error) {
+      console.log("Shared data not available from URL:", error.message);
+    }
+    
+    // Priority 2: Try Firebase if available
     if (this.firebaseAvailable && this.isOnline) {
       try {
         const firebaseData = await this.loadFromFirebase();
@@ -157,17 +180,17 @@ const SyncManager = {
       }
     }
     
-    // Priority 2: If no local data, try to load from shared data file
+    // Priority 3: If no local data, try to load from local data.json in same directory
     if (!store || !store.students || store.students.length === 0) {
       try {
-        const sharedData = await this.loadFromSharedFile();
+        const sharedData = await this.loadFromSharedFile('data.json');
         if (sharedData && sharedData.students && sharedData.students.length > 0) {
-          console.log("Loading from shared data file...");
+          console.log("Loading from local data.json...");
           store = sharedData;
           this.saveLocalData(store);
         }
       } catch (error) {
-        console.log("Shared data not available:", error.message);
+        console.log("Local data.json not available:", error.message);
       }
     }
     
@@ -175,16 +198,16 @@ const SyncManager = {
   },
   
   // Load from a shared JSON file (for student access)
-  async loadFromSharedFile() {
+  async loadFromSharedFile(url) {
     return new Promise((resolve, reject) => {
-      // Try to load from data.json in the same directory
-      fetch('data.json')
+      // Try to load from the specified URL
+      fetch(url + '?t=' + Date.now()) // Add timestamp to prevent caching
         .then(response => {
           if (!response.ok) throw new Error('Data file not found');
           return response.json();
         })
         .then(data => {
-          console.log("Loaded shared data successfully");
+          console.log("Loaded shared data from:", url);
           resolve(data);
         })
         .catch(err => {
@@ -196,6 +219,9 @@ const SyncManager = {
   async saveData(store) {
     store._lastModified = new Date().toISOString();
     this.saveLocalData(store);
+    
+    // Mark that shared data needs export
+    this.markSharedDataNeedsExport();
     
     if (this.firebaseAvailable && this.isOnline) {
       try {
@@ -212,9 +238,43 @@ const SyncManager = {
     store._lastModified = new Date().toISOString();
     this.saveLocalData(store);
     
+    // Mark that shared data needs export (for admin portal)
+    this.markSharedDataNeedsExport();
+    
     if (this.firebaseAvailable && this.isOnline && !this.syncInProgress) {
       this.syncToFirebaseDebounced(store);
     }
+  },
+  
+  // Mark that shared data needs to be exported
+  markSharedDataNeedsExport() {
+    localStorage.setItem(SHARED_DATA_NEEDS_EXPORT_KEY, 'true');
+    this.updateExportIndicator();
+  },
+  
+  // Check if shared data needs export
+  needsSharedDataExport() {
+    return localStorage.getItem(SHARED_DATA_NEEDS_EXPORT_KEY) === 'true';
+  },
+  
+  // Clear the needs export flag
+  clearSharedDataExportFlag() {
+    localStorage.removeItem(SHARED_DATA_NEEDS_EXPORT_KEY);
+    this.updateExportIndicator();
+  },
+  
+  // Update export indicator in UI
+  updateExportIndicator() {
+    const indicators = document.querySelectorAll('[data-needs-export]');
+    const needsExport = this.needsSharedDataExport();
+    indicators.forEach(el => {
+      if (needsExport) {
+        el.innerHTML = '<span class="badge bg-warning"><i class="fas fa-exclamation-triangle"></i> Export Needed</span>';
+        el.style.display = '';
+      } else {
+        el.innerHTML = '<span class="badge bg-success"><i class="fas fa-check"></i> Up to Date</span>';
+      }
+    });
   },
   
   getLocalData() {
@@ -376,8 +436,26 @@ const SyncManager = {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
+    // Clear the needs export flag after successful export
+    this.clearSharedDataExportFlag();
+    
     console.log("Shared data exported as data.json");
     return true;
+  },
+  
+  // Auto-export notification and helper
+  notifyDataChanged() {
+    // This can be called after any data modification
+    this.markSharedDataNeedsExport();
+    
+    // Show notification if available
+    const notificationEl = document.getElementById('exportNotification');
+    if (notificationEl) {
+      notificationEl.classList.remove('d-none');
+      setTimeout(() => {
+        notificationEl.classList.add('d-none');
+      }, 5000);
+    }
   },
   
   importData(file) {
@@ -393,6 +471,9 @@ const SyncManager = {
           }
           
           this.saveLocalData(importedData);
+          
+          // Mark that shared data needs export
+          this.markSharedDataNeedsExport();
           
           if (this.firebaseAvailable && this.isOnline) {
             this.saveToFirebase(importedData);
@@ -437,8 +518,11 @@ const SyncManager = {
 
 window.SyncManager = SyncManager;
 window.DB_KEY = DB_KEY;
+window.setSharedDataUrl = setSharedDataUrl;
 
 document.addEventListener('DOMContentLoaded', async () => {
   await SyncManager.init();
+  // Update export indicator on load
+  SyncManager.updateExportIndicator();
 });
 

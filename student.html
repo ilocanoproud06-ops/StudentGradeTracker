@@ -23,6 +23,23 @@
       // Storage mode - default to localStorage for offline use
       // Set to true only if you want cloud sync with Firebase
       window.FORCE_LOCAL_ONLY = true; // Always use localStorage first (works offline)
+
+      // AUTO-DETECT: Automatically detect GitHub Pages URL from current location
+      // This works when deployed to GitHub Pages
+      const currentPath = window.location.pathname;
+      const pathParts = currentPath.split("/").filter((p) => p);
+      // Remove the current file name to get the base path
+      const basePath =
+        pathParts.length > 0
+          ? "/" + pathParts.slice(0, -1).join("/") + "/"
+          : "/";
+      // Construct the GitHub Pages URL
+      const GITHUB_PAGES_DATA_URL =
+        window.location.origin + basePath + "data.json";
+
+      // Initialize shared data URL
+      setSharedDataUrl(GITHUB_PAGES_DATA_URL);
+      console.log("GitHub Pages Data URL:", GITHUB_PAGES_DATA_URL);
     </script>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap");
@@ -289,6 +306,15 @@
           </h1>
         </div>
         <div class="flex items-center gap-3">
+          <!-- Refresh Data Button -->
+          <button
+            id="refreshDataBtn"
+            onclick="refreshStudentData()"
+            class="btn btn-sm btn-outline-primary"
+            title="Refresh data from server"
+          >
+            <i class="fas fa-sync-alt me-1"></i> Refresh
+          </button>
           <!-- Connection Status Indicator -->
           <div id="connectionStatus" class="badge bg-warning">
             <i class="fas fa-wifi me-1"></i>
@@ -701,6 +727,37 @@
       updateConnectionStatus();
       window.addEventListener("online", updateConnectionStatus);
       window.addEventListener("offline", updateConnectionStatus);
+
+      // Refresh student data from server
+      async function refreshStudentData() {
+        const refreshBtn = document.getElementById("refreshDataBtn");
+        const originalContent = refreshBtn.innerHTML;
+
+        // Show loading state
+        refreshBtn.innerHTML =
+          '<i class="fas fa-spinner fa-spin me-1"></i> Loading...';
+        refreshBtn.disabled = true;
+
+        try {
+          // Reload data from SyncManager (will try GitHub Pages URL first, then Firebase, then local)
+          const storeData = await SyncManager.loadData();
+          store = storeData;
+
+          // Re-render grades
+          if (currentStudentId) {
+            renderStudentGrades();
+          }
+
+          alert("Data refreshed successfully!");
+        } catch (error) {
+          console.error("Error refreshing data:", error);
+          alert("Error refreshing data. Please try again.");
+        } finally {
+          // Restore button
+          refreshBtn.innerHTML = originalContent;
+          refreshBtn.disabled = false;
+        }
+      }
 
       // Ensure assessments array exists (for backwards compatibility)
       if (!store.assessments) {

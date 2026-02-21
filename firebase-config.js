@@ -14,6 +14,63 @@ const SHARED_DATA_NEEDS_EXPORT_KEY = "academic_shared_data_needs_export";
 // This can be customized per deployment
 let SHARED_DATA_URL = "data.json";
 
+// GitHub Pages Configuration - Auto-detect from current location
+const GITHUB_PAGES_CONFIG = {
+  // Auto-detect GitHub Pages URL from current location
+  getBaseUrl: function() {
+    const currentPath = window.location.pathname;
+    const pathParts = currentPath.split("/").filter(p => p);
+    // Remove the current file name to get the base path
+    const basePath = pathParts.length > 0 
+      ? "/" + pathParts.slice(0, -1).join("/") + "/"
+      : "/";
+    return window.location.origin + basePath;
+  },
+  
+  // Get all navigation URLs for this application
+  getNavigationUrls: function() {
+    const baseUrl = this.getBaseUrl();
+    return {
+      // GitHub Pages URLs
+      githubPages: {
+        base: baseUrl,
+        admin: baseUrl + "admin_portal.html",
+        student: baseUrl + "student.html",
+        login: baseUrl + "login.html",
+        data: baseUrl + "data.json",
+        welcome: baseUrl + "welcome.html",
+        welcomeAdmin: baseUrl + "welcome_admin.html",
+        welcomeStudent: baseUrl + "welcome_student.html"
+      },
+      // Firebase URLs (if configured)
+      firebase: {
+        console: "https://console.firebase.google.com/project/studentgradetracker-e04c0",
+        firestore: "https://console.firebase.google.com/project/studentgradetracker-e04c0/firestore",
+        auth: "https://console.firebase.google.com/project/studentgradetracker-e04c0/authentication"
+      },
+      // Alternative GitHub repository URLs
+      alternativeRepos: [
+        { name: "Main Repo", url: "https://ilocanoproud06-ops.github.io/StudentGradeTracker/" },
+        { name: "Admin Repo", url: "https://ilocanoproud06-ops.github.io/StudentGradeTracker-Admin/" },
+        { name: "Student Repo", url: "https://ilocanoproud06-ops.github.io/StudentGradeTracker-Student/" },
+        { name: "StudentTracker", url: "https://ilocanoproud06-ops.github.io/StudentTracker/" }
+      ]
+    };
+  },
+  
+  // Display URLs in console for debugging
+  logUrls: function() {
+    const urls = this.getNavigationUrls();
+    console.log("=== Application Navigation URLs ===");
+    console.log("GitHub Pages Base:", urls.githubPages.base);
+    console.log("Admin Portal:", urls.githubPages.admin);
+    console.log("Student Portal:", urls.githubPages.student);
+    console.log("Login:", urls.githubPages.login);
+    console.log("Data JSON:", urls.githubPages.data);
+    return urls;
+  }
+};
+
 // Check if Firebase SDK is loaded
 const isFirebaseSDKLoaded = typeof firebase !== 'undefined';
 
@@ -524,5 +581,228 @@ document.addEventListener('DOMContentLoaded', async () => {
   await SyncManager.init();
   // Update export indicator on load
   SyncManager.updateExportIndicator();
+});
+
+// Also expose a ready function for pages that need to wait for SyncManager
+window.waitForSyncManager = function() {
+  return new Promise((resolve) => {
+    if (SyncManager.firebaseInitResult !== null) {
+      // Already initialized
+      resolve(SyncManager);
+    } else {
+      // Wait for init to complete
+      const checkInit = setInterval(() => {
+        if (SyncManager.firebaseInitResult !== null) {
+          clearInterval(checkInit);
+          resolve(SyncManager);
+        }
+      }, 100);
+    }
+  });
+};
+
+// ============================================
+// URL Display Helper Functions
+// ============================================
+
+// Get navigation URLs - can be called from any page
+window.getNavigationUrls = function() {
+  return GITHUB_PAGES_CONFIG.getNavigationUrls();
+};
+
+// Display URLs in a formatted way
+window.displayNavigationUrls = function(containerId) {
+  const urls = GITHUB_PAGES_CONFIG.getNavigationUrls();
+  const container = document.getElementById(containerId);
+  
+  if (!container) {
+    console.log("Container not found, logging URLs instead:");
+    GITHUB_PAGES_CONFIG.logUrls();
+    return;
+  }
+  
+  let html = `
+    <div class="url-display-container">
+      <h6 class="mb-3"><i class="fas fa-link me-2"></i>Navigation URLs</h6>
+      
+      <div class="mb-3">
+        <label class="form-label fw-bold text-primary">Student Portal (for all networks)</label>
+        <div class="input-group">
+          <input type="text" class="form-control form-control-sm" value="${urls.githubPages.student}" readonly>
+          <button class="btn btn-outline-primary btn-sm" onclick="navigator.clipboard.writeText('${urls.githubPages.student}'); this.innerHTML='<i class=\\'fas fa-check\\'></i>'">
+            <i class="fas fa-copy"></i>
+          </button>
+          <a href="${urls.githubPages.student}" target="_blank" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-external-link-alt"></i>
+          </a>
+        </div>
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label fw-bold">Admin Portal</label>
+        <div class="input-group">
+          <input type="text" class="form-control form-control-sm" value="${urls.githubPages.admin}" readonly>
+          <button class="btn btn-outline-primary btn-sm" onclick="navigator.clipboard.writeText('${urls.githubPages.admin}'); this.innerHTML='<i class=\\'fas fa-check\\'></i>'">
+            <i class="fas fa-copy"></i>
+          </button>
+          <a href="${urls.githubPages.admin}" target="_blank" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-external-link-alt"></i>
+          </a>
+        </div>
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label fw-bold">Data JSON (for updates)</label>
+        <div class="input-group">
+          <input type="text" class="form-control form-control-sm" value="${urls.githubPages.data}" readonly>
+          <button class="btn btn-outline-primary btn-sm" onclick="navigator.clipboard.writeText('${urls.githubPages.data}'); this.innerHTML='<i class=\\'fas fa-check\\'></i>'">
+            <i class="fas fa-copy"></i>
+          </button>
+        </div>
+      </div>
+      
+      <hr>
+      
+      <h6 class="mb-2"><i class="fas fa-server me-2"></i>Alternative Access URLs</h6>
+      <div class="list-group list-group-sm">`;
+  
+  urls.alternativeRepos.forEach(repo => {
+    html += `
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+          <span>${repo.name}</span>
+          <div>
+            <button class="btn btn-xs btn-outline-primary me-1" onclick="navigator.clipboard.writeText('${repo.url}'); alert('URL copied!')">
+              <i class="fas fa-copy"></i>
+            </button>
+            <a href="${repo.url}" target="_blank" class="btn btn-xs btn-outline-success">
+              <i class="fas fa-external-link-alt"></i>
+            </a>
+          </div>
+        </div>`;
+  });
+  
+  html += `
+      </div>
+      
+      <hr>
+      
+      <h6 class="mb-2"><i class="fas fa-database me-2"></i>Firebase Console</h6>
+      <div class="list-group list-group-sm">
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+          <span>Firestore</span>
+          <a href="${urls.firebase.firestore}" target="_blank" class="btn btn-xs btn-outline-info">
+            <i class="fas fa-external-link-alt"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  container.innerHTML = html;
+};
+
+// Create a modal with all URLs
+window.showUrlModal = function() {
+  const urls = GITHUB_PAGES_CONFIG.getNavigationUrls();
+  
+  // Remove existing modal if any
+  const existingModal = document.getElementById('urlDisplayModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  const modalHtml = `
+    <div class="modal fade" id="urlDisplayModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+              <i class="fas fa-link me-2"></i>Grade Viewer Access URLs
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="alert alert-info">
+              <i class="fas fa-info-circle me-2"></i>
+              <strong>Share these URLs with students!</strong> They can access the grade viewer from any network.
+            </div>
+            
+            <div class="mb-4">
+              <label class="form-label fw-bold text-success fs-5">🎓 Student Portal (Main)</label>
+              <div class="input-group input-group-lg">
+                <input type="text" class="form-control fw-bold" value="${urls.githubPages.student}" id="mainStudentUrl" readonly>
+                <button class="btn btn-success" onclick="navigator.clipboard.writeText(document.getElementById('mainStudentUrl').value); this.innerHTML='<i class=\\'fas fa-check\\'></i> Copied!'">
+                  <i class="fas fa-copy"></i> Copy
+                </button>
+                <a href="${urls.githubPages.student}" target="_blank" class="btn btn-primary">
+                  <i class="fas fa-external-link-alt"></i> Open
+                </a>
+              </div>
+            </div>
+            
+            <div class="mb-4">
+              <label class="form-label fw-bold">Alternative URLs</label>
+              <div class="list-group">`;
+  
+  urls.alternativeRepos.forEach(repo => {
+    modalHtml += `
+                <div class="list-group-item">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">${repo.name}</span>
+                    <div class="input-group" style="max-width: 400px;">
+                      <input type="text" class="form-control form-control-sm" value="${repo.url}" readonly>
+                      <button class="btn btn-outline-primary btn-sm" onclick="navigator.clipboard.writeText('${repo.url}'); alert('Copied!')">
+                        <i class="fas fa-copy"></i>
+                      </button>
+                      <a href="${repo.url}" target="_blank" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-external-link-alt"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>`;
+  });
+  
+  modalHtml += `
+              </div>
+            </div>
+            
+            <div class="mb-4">
+              <label class="form-label fw-bold">Admin Portal (for teachers)</label>
+              <div class="input-group">
+                <input type="text" class="form-control" value="${urls.githubPages.admin}" readonly>
+                <button class="btn btn-outline-primary" onclick="navigator.clipboard.writeText('${urls.githubPages.admin}'); alert('Copied!')">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="alert alert-warning">
+              <i class="fas fa-sync me-2"></i>
+              <strong>Auto-Sync Status:</strong> Changes made in Admin Portal are automatically synced to Firebase. 
+              For GitHub Pages, use "Export Shared Data" button to update student data.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  const modal = new bootstrap.Modal(document.getElementById('urlDisplayModal'));
+  modal.show();
+};
+
+// Initialize GitHub Pages URL on load
+document.addEventListener('DOMContentLoaded', function() {
+  // Auto-detect and set the shared data URL
+  const detectedUrl = GITHUB_PAGES_CONFIG.getBaseUrl() + 'data.json';
+  setSharedDataUrl(detectedUrl);
+  console.log("Auto-detected shared data URL:", detectedUrl);
+  
+  // Log all URLs for debugging
+  GITHUB_PAGES_CONFIG.logUrls();
 });
 

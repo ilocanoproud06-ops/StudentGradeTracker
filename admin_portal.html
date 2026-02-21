@@ -131,6 +131,7 @@
             <a
               class="nav-link active"
               href="javascript:void(0)"
+              data-section="dashboard"
               onclick="showSection('dashboard')"
               ><i class="fas fa-chart-line me-2"></i>Dashboard</a
             >
@@ -139,6 +140,7 @@
             <a
               class="nav-link"
               href="javascript:void(0)"
+              data-section="courses"
               onclick="showSection('courses')"
               ><i class="fas fa-book me-2"></i>Courses</a
             >
@@ -147,6 +149,7 @@
             <a
               class="nav-link"
               href="javascript:void(0)"
+              data-section="students"
               onclick="showSection('students')"
               ><i class="fas fa-users me-2"></i>Students</a
             >
@@ -155,6 +158,7 @@
             <a
               class="nav-link"
               href="javascript:void(0)"
+              data-section="enrollment"
               onclick="showSection('enrollment')"
               ><i class="fas fa-user-plus me-2"></i>Enrollment</a
             >
@@ -163,6 +167,7 @@
             <a
               class="nav-link"
               href="javascript:void(0)"
+              data-section="grades"
               onclick="showSection('grades')"
               ><i class="fas fa-clipboard-list me-2"></i>Grade Entry</a
             >
@@ -171,6 +176,7 @@
             <a
               class="nav-link"
               href="javascript:void(0)"
+              data-section="grading"
               onclick="showSection('grading')"
               ><i class="fas fa-scale-balanced me-2"></i>Grading Scale</a
             >
@@ -179,6 +185,7 @@
             <a
               class="nav-link"
               href="javascript:void(0)"
+              data-section="assessmentHps"
               onclick="showSection('assessmentHps')"
               ><i class="fas fa-calculator me-2"></i>Assessment & HPS</a
             >
@@ -187,6 +194,16 @@
             <a
               class="nav-link"
               href="javascript:void(0)"
+              data-section="trash"
+              onclick="showSection('trash')"
+              ><i class="fas fa-trash me-2"></i>Trash</a
+            >
+          </li>
+          <li class="nav-item">
+            <a
+              class="nav-link"
+              href="javascript:void(0)"
+              data-section="groups"
               onclick="showSection('groups')"
               ><i class="fas fa-users me-2"></i>Group Management</a
             >
@@ -245,6 +262,13 @@
             onclick="document.getElementById('importFile').click()"
           >
             <i class="fas fa-upload me-1"></i> Import Backup
+          </button>
+          <!-- Show URLs Button -->
+          <button
+            class="btn btn-sm btn-success w-100 mt-2"
+            onclick="showUrlModal()"
+          >
+            <i class="fas fa-link me-1"></i> Show Access URLs
           </button>
         </div>
       </div>
@@ -944,6 +968,52 @@
           </div>
         </div>
 
+        <!-- Trash Section for Deleted Assessments -->
+        <div id="trashSection" class="section d-none">
+          <h4 class="fw-bold mb-4"><i class="fas fa-trash me-2"></i>Trash</h4>
+          <div class="card">
+            <div
+              class="card-header d-flex justify-content-between align-items-center"
+            >
+              <h5 class="mb-0">Deleted Assessments</h5>
+              <button
+                class="btn btn-sm btn-danger"
+                onclick="emptyTrashAssessments()"
+              >
+                <i class="fas fa-trash-alt me-1"></i> Empty Trash
+              </button>
+            </div>
+            <div class="card-body">
+              <div
+                id="deletedAssessmentsEmpty"
+                class="text-center py-5 text-muted"
+              >
+                <p>
+                  <i class="fas fa-trash fa-3x mb-3"></i><br />Trash is empty
+                </p>
+              </div>
+              <div class="table-responsive">
+                <table
+                  class="table table-hover d-none"
+                  id="deletedAssessmentsTable"
+                >
+                  <thead class="table-light">
+                    <tr>
+                      <th>Type</th>
+                      <th>Title</th>
+                      <th>Course</th>
+                      <th>Date</th>
+                      <th>Deleted</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="deletedAssessmentsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Group Management Section -->
         <div id="groupsSection" class="section d-none">
           <h4 class="fw-bold mb-4">Group Management</h4>
@@ -1319,6 +1389,7 @@
         enrollments: [],
         grades: {},
         assessments: [],
+        deletedAssessments: [], // Trash for deleted assessments
         groups: [],
         hps: { quiz: 50, pt: 100, project: 100, exam: 100 },
         weights: { written: 40, quiz: 20, pt: 30, project: 10 },
@@ -1335,6 +1406,12 @@
           { min: 0, max: 54, label: "F" },
         ],
       };
+
+      // Ensure deletedAssessments array exists (for backwards compatibility)
+      if (!store.deletedAssessments) {
+        store.deletedAssessments = [];
+        localStorage.setItem(DB_KEY, JSON.stringify(store));
+      }
 
       // Ensure assessments array exists (for backwards compatibility)
       if (!store.assessments) {
@@ -1418,7 +1495,6 @@
       document.addEventListener("DOMContentLoaded", function () {
         // Show main content directly (authentication handled by admin_login.html)
         document.getElementById("mainContent").style.display = "flex";
-        initApp();
 
         // Use event delegation for navigation links (more reliable)
         document.addEventListener("click", function (e) {
@@ -1429,6 +1505,28 @@
             showSection(navLink.dataset.section);
           }
         });
+
+        // Wait for SyncManager to be ready before initializing the app
+        // This ensures firebase-config.js has finished loading
+        if (window.waitForSyncManager) {
+          window
+            .waitForSyncManager()
+            .then(function () {
+              console.log("SyncManager ready, initializing app...");
+              initApp();
+            })
+            .catch(function (err) {
+              console.error("Error waiting for SyncManager:", err);
+              initApp(); // Still try to initialize even if there's an error
+            });
+        } else {
+          // Fallback if waitForSyncManager is not available
+          console.log(
+            "waitForSyncManager not found, initializing app directly...",
+          );
+          initApp();
+        }
+
         document
           .getElementById("courseForm")
           .addEventListener("submit", function (e) {
@@ -1503,16 +1601,23 @@
           }
         }
 
-        document
-          .querySelectorAll(".section")
-          .forEach((s) => s.classList.add("d-none"));
+        var sections = document.querySelectorAll(".section");
+        for (var i = 0; i < sections.length; i++) {
+          sections[i].classList.add("d-none");
+          sections[i].style.display = "none";
+        }
         document
           .querySelectorAll(".nav-link")
           .forEach((l) => l.classList.remove("active"));
-        document.getElementById(id + "Section").classList.remove("d-none");
-        document
-          .querySelector('[data-section="' + id + '"]')
-          .classList.add("active");
+        var targetSection = document.getElementById(id + "Section");
+        if (targetSection) {
+          targetSection.classList.remove("d-none");
+          targetSection.style.display = "block";
+        }
+        var targetNav = document.querySelector('[data-section="' + id + '"]');
+        if (targetNav) {
+          targetNav.classList.add("active");
+        }
         if (id === "grades") {
           populateGradeSelects();
           updateGradesSummary();
@@ -1547,6 +1652,10 @@
         if (id === "groups") {
           renderGroups();
           populateGroupCourseSelect();
+        }
+        // Refresh trash section when navigating to trash
+        if (id === "trash") {
+          renderDeletedAssessments();
         }
       }
 
@@ -3947,10 +4056,110 @@
 
       function deleteAssessment(i) {
         if (confirm("Delete this assessment?")) {
+          // Move to trash instead of permanent delete
+          var deletedAssessment = store.assessments[i];
+          deletedAssessment.deletedAt = new Date().toISOString(); // Track when it was deleted
+          store.deletedAssessments.push(deletedAssessment);
           store.assessments.splice(i, 1);
           save();
           renderAssessment();
+          // Show notification about trash
+          alert(
+            "Assessment moved to trash! You can restore it from the Trash section.",
+          );
         }
+      }
+
+      // Restore assessment from trash
+      function restoreAssessment(i) {
+        var assessment = store.deletedAssessments[i];
+        if (assessment) {
+          // Remove the deletedAt property before restoring
+          delete assessment.deletedAt;
+          store.assessments.push(assessment);
+          store.deletedAssessments.splice(i, 1);
+          save();
+          renderDeletedAssessments();
+          renderAssessment();
+          alert("Assessment restored successfully!");
+        }
+      }
+
+      // Permanently delete assessment from trash
+      function permanentDeleteAssessment(i) {
+        if (
+          confirm("Permanently delete this assessment? This cannot be undone!")
+        ) {
+          store.deletedAssessments.splice(i, 1);
+          save();
+          renderDeletedAssessments();
+          alert("Assessment permanently deleted!");
+        }
+      }
+
+      // Empty all items from trash
+      function emptyTrashAssessments() {
+        if (
+          confirm(
+            "Are you sure you want to permanently delete all items in trash? This cannot be undone!",
+          )
+        ) {
+          store.deletedAssessments = [];
+          save();
+          renderDeletedAssessments();
+          alert("Trash emptied successfully!");
+        }
+      }
+
+      // Render deleted assessments (trash)
+      function renderDeletedAssessments() {
+        var tbody = document.querySelector("#deletedAssessmentsTable tbody");
+        var emptyMsg = document.getElementById("deletedAssessmentsEmpty");
+
+        if (!tbody || !emptyMsg) return;
+
+        if (store.deletedAssessments.length === 0) {
+          tbody.innerHTML = "";
+          emptyMsg.classList.remove("d-none");
+          return;
+        }
+
+        emptyMsg.classList.add("d-none");
+
+        var typeLabels = {
+          written: "Written Exam",
+          quiz: "Quiz",
+          pt: "Performance Task",
+          project: "Project",
+        };
+
+        tbody.innerHTML = store.deletedAssessments
+          .map(function (a, i) {
+            var course = store.courses.find(function (c) {
+              return c.id === a.courseId;
+            });
+            var deletedDate = a.deletedAt
+              ? new Date(a.deletedAt).toLocaleDateString()
+              : "Unknown";
+            return (
+              "<tr><td>" +
+              (typeLabels[a.type] || a.type) +
+              "</td><td>" +
+              a.title +
+              "</td><td>" +
+              (course ? course.code : "N/A") +
+              "</td><td>" +
+              a.date +
+              "</td><td>" +
+              deletedDate +
+              '</td><td><button class="btn btn-sm btn-success me-1" onclick="restoreAssessment(' +
+              i +
+              ')" title="Restore"><i class="fas fa-trash-restore"></i> Restore</button><button class="btn btn-sm btn-danger" onclick="permanentDeleteAssessment(' +
+              i +
+              '" title="Permanently Delete"><i class="fas fa-times"></i></button></td></tr>'
+            );
+          })
+          .join("");
       }
 
       // Assessment & HPS Entry Functions
